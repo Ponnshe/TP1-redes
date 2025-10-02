@@ -35,7 +35,13 @@ class Protocol:
     SELECTIVE_REPEAT = 2
     HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 
-    def __init__(self, local_host="127.0.0.1", local_port=0, client=False, recovery_mode=STOP_AND_WAIT):
+    def __init__(
+        self,
+        local_host="127.0.0.1",
+        local_port=0,
+        client=False,
+        recovery_mode=STOP_AND_WAIT,
+    ):
         self.is_connected = False
         self.socket = None
         self.peer_address = None
@@ -62,7 +68,9 @@ class Protocol:
     def recv(self, payload_size: int, type: int) -> bytes:
         if not self.is_connected:
             raise ConnectionError("Socket could not be connected.")
-        header, data = self._receive_reliable_packet(payload_size=payload_size, expected_flags=FLAG_PSH, type = type) 
+        header, data = self._receive_reliable_packet(
+            payload_size=payload_size, expected_flags=FLAG_PSH, type=type
+        )
         if data:
             return bytes(data)
         else:
@@ -72,9 +80,11 @@ class Protocol:
 
         self.peer_address = server_address
         self.filename = filename
-        logger.vprint(f"[CLIENT] Initializating handshake with peer {server_address}")
+        logger.vprint(
+            f"[CLIENT] Initializating handshake with peer {server_address}"
+        )
 
-        client_isn = self.seq_num 
+        client_isn = self.seq_num
         self.ack_num = 0
 
         attempts = 6
@@ -86,7 +96,9 @@ class Protocol:
             self.seq_num = client_isn
             self._send_packet(FLAG_SYN)
             self.seq_num = saved_seq
-            logger.vprint(f"[CLIENT] SYN (ISN={client_isn}) sent. Waiting SYN-ACK...")
+            logger.vprint(
+                f"[CLIENT] SYN (ISN={client_isn}) sent. Waiting SYN-ACK..."
+            )
 
             deadline = time.monotonic() + rto
             while True:
@@ -97,11 +109,15 @@ class Protocol:
                 if not header:
                     continue
                 if addr[0] != server_address[0]:
-                    logger.vprint(f"[CLIENT] Unexpected source {addr}, ignoring.")
+                    logger.vprint(
+                        f"[CLIENT] Unexpected source {addr}, ignoring."
+                    )
                     continue
                 if (header[2] & FLAG_SYN) and (header[2] & FLAG_ACK):
                     if header[1] != client_isn + 1:
-                        logger.vprint(f"[CLIENT] SYN-ACK with unexpected ACK number{header[1]} (expected: {client_isn+1}). Ignoring.")
+                        logger.vprint(
+                            f"[CLIENT] SYN-ACK with unexpected ACK number{header[1]} (expected: {client_isn+1}). Ignoring."
+                        )
                         continue
                     server_isn = header[0]
                     # Set our post-SYN numbers
@@ -109,26 +125,36 @@ class Protocol:
                     self.seq_num = client_isn + 1
                     self.ack_num = server_isn + 1
                     synack_ok = True
-                    logger.vprint(f"[CLIENT] SYN-ACK ok: server_isn={server_isn}.")
+                    logger.vprint(
+                        f"[CLIENT] SYN-ACK ok: server_isn={server_isn}."
+                    )
                     break
                 else:
                     # Ignore anything else during handshake
-                    logger.vprint(f"[CLIENT] No SYN-ACK packet during handshake: flags={bin(header[2])}. Ignoring.")
+                    logger.vprint(
+                        f"[CLIENT] No SYN-ACK packet during handshake: flags={bin(header[2])}. Ignoring."
+                    )
 
             if not synack_ok:
                 attempts -= 1
                 rto = min(rto * 2.0, 8.0)  # simple backoff cap
-                logger.vprint(f"[CLIENT] Sending again SYN... Remaining attempts={attempts}")
+                logger.vprint(
+                    f"[CLIENT] Sending again SYN... Remaining attempts={attempts}"
+                )
 
         if not synack_ok:
-            logger.vprint("[CLIENT] Failed handshake: no SYN-ACK valid was received.")
+            logger.vprint(
+                "[CLIENT] Failed handshake: no SYN-ACK valid was received."
+            )
             return False
 
         # --- 2) Send final ACK and LINGER to re-ACK duplicates ---
         # We send the final ACK once, then listen briefly; if a duplicate SYN-ACK arrives,
         # re-send the ACK so the server can transition to ESTABLISHED.
         self._send_packet(FLAG_ACK)
-        logger.vprint("[CLIENT] final ACK sent. Linger for SYN-ACK duplicates ...")
+        logger.vprint(
+            "[CLIENT] final ACK sent. Linger for SYN-ACK duplicates ..."
+        )
 
         linger_end = time.monotonic() + 2.0  # short linger window
         while time.monotonic() < linger_end:
@@ -141,7 +167,7 @@ class Protocol:
                 continue
             if (header[2] & FLAG_SYN) and (header[2] & FLAG_ACK):
                 # Server likely missed our ACK; re-ACK
-                self.ack_num = header[0] + 1   # next expected from server
+                self.ack_num = header[0] + 1  # next expected from server
                 # Keep seq_num at client_isn+1 (no new data yet)
                 self._send_packet(FLAG_ACK)
                 logger.vprint("[CLIENT] Re-ACKing SYN-ACK duplicates.")
@@ -149,24 +175,32 @@ class Protocol:
                 # Ignore anything else in linger (no state advance yet)
                 pass
 
-        logger.vprint(f"[CLIENT] Complete handshake with peer: {self.peer_address}")
+        logger.vprint(
+            f"[CLIENT] Complete handshake with peer: {self.peer_address}"
+        )
 
         # --- 3) Send OP and FNAME reliably (as you already do) ---
         self.is_connected = True
         chosen_protocol = self.recovery_mode
         payload = bytes([fileop & 0xFF, chosen_protocol & 0xFF])
         if not self._send_reliable_packet(FLAG_PSH | FLAG_OP, payload):
-            logger.vprint("[CLIENT] Operation could not be confirmed with the server.")
+            logger.vprint(
+                "[CLIENT] Operation could not be confirmed with the server."
+            )
             self.is_connected = False
             return False
 
         logger.vprint(f"[CLIENT] Sending filename: {self.filename}")
-        if not self._send_reliable_packet(FLAG_PSH | FLAG_FNAME, self.filename.encode("utf-8")):
+        if not self._send_reliable_packet(
+            FLAG_PSH | FLAG_FNAME, self.filename.encode("utf-8")
+        ):
             logger.vprint("[CLIENT] Filename could not be sent to the server.")
             self.is_connected = False
             return False
 
-        logger.vprint(f"[CLIENT] Connection stablished with peer: {self.peer_address}")
+        logger.vprint(
+            f"[CLIENT] Connection stablished with peer: {self.peer_address}"
+        )
         return True
 
     def accept(self):
@@ -211,7 +245,9 @@ class Protocol:
             client_protocol.seq_num = server_isn
             client_protocol._send_packet(FLAG_SYN | FLAG_ACK)
             client_protocol.seq_num = saved
-            logger.vprint(f"[SERVER] SYN-ACK (ISN={server_isn}) enviado a {client_addr}")
+            logger.vprint(
+                f"[SERVER] SYN-ACK (ISN={server_isn}) enviado a {client_addr}"
+            )
 
             # 4) Wait for final ACK or duplicate SYN; retransmit on timeout
             deadline = time.monotonic() + rto
@@ -219,16 +255,26 @@ class Protocol:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
-                hdr, _, addr = client_protocol._receive_packet(max(0.0, remaining))
+                hdr, _, addr = client_protocol._receive_packet(
+                    max(0.0, remaining)
+                )
                 if not hdr:
                     continue
                 if addr != client_addr:
-                    logger.vprint("[SERVER] Packet from another origin during handshake; ignoring.")
+                    logger.vprint(
+                        "[SERVER] Packet from another origin during handshake; ignoring."
+                    )
                     continue
 
                 # Duplicate SYN from client (it didn't see our SYN-ACK) -> re-send SYN-ACK
-                if (hdr[2] & FLAG_SYN) and not (hdr[2] & FLAG_ACK) and hdr[0] == client_isn:
-                    logger.vprint("[SERVER] duplicate SYN; re-sending SYN-ACK.")
+                if (
+                    (hdr[2] & FLAG_SYN)
+                    and not (hdr[2] & FLAG_ACK)
+                    and hdr[0] == client_isn
+                ):
+                    logger.vprint(
+                        "[SERVER] duplicate SYN; re-sending SYN-ACK."
+                    )
                     saved = client_protocol.seq_num
                     client_protocol.seq_num = server_isn
                     client_protocol._send_packet(FLAG_SYN | FLAG_ACK)
@@ -237,14 +283,19 @@ class Protocol:
 
                 # Final ACK from client; validate ACK number
                 if (hdr[2] & FLAG_ACK) and hdr[1] == server_isn + 1:
-                    logger.vprint("[SERVER] final ACK OK. Completed handshake.")
+                    logger.vprint(
+                        "[SERVER] final ACK OK. Completed handshake."
+                    )
                     client_protocol.seq_num = server_isn + 1
                     client_protocol.is_connected = True
                     # Ready to receive OP/FNAME using the per-client socket
                     # Receive OP
-                    hdr, data = client_protocol._receive_reliable_packet(expected_flags=FLAG_OP, payload_size=PAYLOAD_SIZE)
+                    hdr, data = client_protocol._receive_reliable_packet(
+                        expected_flags=FLAG_OP, payload_size=PAYLOAD_SIZE
+                    )
                     if not hdr or not (hdr[2] & FLAG_OP) or not data:
-                        client_protocol.close(); return None
+                        client_protocol.close()
+                        return None
                     if len(data) >= 2:
                         client_protocol.operation = data[0]
                         client_protocol.recovery_mode = data[1]
@@ -253,32 +304,42 @@ class Protocol:
                         client_protocol.recovery_mode = self.STOP_AND_WAIT
 
                     # Receive FNAME
-                    hdr, data = client_protocol._receive_reliable_packet(expected_flags=FLAG_FNAME, payload_size=PAYLOAD_SIZE)
+                    hdr, data = client_protocol._receive_reliable_packet(
+                        expected_flags=FLAG_FNAME, payload_size=PAYLOAD_SIZE
+                    )
                     if not hdr or not (hdr[2] & FLAG_FNAME) or not data:
-                        client_protocol.close(); return None
+                        client_protocol.close()
+                        return None
 
-                    fname = data.decode('utf-8', errors='replace').strip()
+                    fname = data.decode("utf-8", errors="replace").strip()
                     if not fname:
                         logger.vprint("[SERVER] Empty filename.")
                         client_protocol.close()
                         return None
                     client_protocol.filename = fname
 
-                    logger.vprint(f"[SERVER] Accepted connection from peer:{client_protocol.peer_address}, filename: {client_protocol.filename}")
+                    logger.vprint(
+                        f"[SERVER] Accepted connection from peer:{client_protocol.peer_address}, filename: {client_protocol.filename}"
+                    )
 
                     return client_protocol
 
                 # Anything else during handshake is ignored
-                logger.vprint(f"[SERVER] Unexpected packet during handshake: flags={bin(hdr[2])}")
+                logger.vprint(
+                    f"[SERVER] Unexpected packet during handshake: flags={bin(hdr[2])}"
+                )
 
             attempts -= 1
             rto = min(rto * 2.0, 8.0)
-            logger.vprint(f"[SERVER] Timeout occured waiting for ACK; Retrying SYN-ACK (remaining attempts: {attempts}).")
+            logger.vprint(
+                f"[SERVER] Timeout occured waiting for ACK; Retrying SYN-ACK (remaining attempts: {attempts})."
+            )
 
-        logger.vprint("[SERVER] Failed handshake after several tries. Closing connection.")
+        logger.vprint(
+            "[SERVER] Failed handshake after several tries. Closing connection."
+        )
         client_protocol.close()
         return None
-
 
     def close(self, attempts: int = 6, linger: float = None):
         """
@@ -311,7 +372,9 @@ class Protocol:
 
                 deadline = time.monotonic() + rto
                 while time.monotonic() < deadline:
-                    header, _, addr = self._receive_packet(deadline - time.monotonic())
+                    header, _, addr = self._receive_packet(
+                        deadline - time.monotonic()
+                    )
                     if not header or addr != self.peer_address:
                         continue
 
@@ -337,12 +400,19 @@ class Protocol:
                     tries -= 1
 
             # 2) If we haven't seen peer FIN yet, wait a bit for it and ACK it
-            wait_for_fin = (linger if linger is not None
-                            else max(1.0, 2.0 * self.rto_estimator.get_timeout()))
+            wait_for_fin = (
+                linger
+                if linger is not None
+                else max(1.0, 2.0 * self.rto_estimator.get_timeout())
+            )
             end = time.monotonic() + wait_for_fin
             while time.monotonic() < end:
                 header, _, addr = self._receive_packet(end - time.monotonic())
-                if header and addr == self.peer_address and (header[2] & FLAG_FIN):
+                if (
+                    header
+                    and addr == self.peer_address
+                    and (header[2] & FLAG_FIN)
+                ):
                     self.ack_num = header[0] + 1
                     self._send_packet(FLAG_ACK)
                     peer_fin_seen = True
@@ -352,15 +422,29 @@ class Protocol:
             tw = max(0.5, self.rto_estimator.get_timeout())
             tw_end = time.monotonic() + tw
             while time.monotonic() < tw_end:
-                header, _, addr = self._receive_packet(tw_end - time.monotonic())
-                if header and addr == self.peer_address and (header[2] & FLAG_FIN):
+                header, _, addr = self._receive_packet(
+                    tw_end - time.monotonic()
+                )
+                if (
+                    header
+                    and addr == self.peer_address
+                    and (header[2] & FLAG_FIN)
+                ):
                     self.ack_num = header[0] + 1
                     self._send_packet(FLAG_ACK)
 
             logger.vprint(
                 "Connection closure"
-                + ("(FIN ACKed) confirmed" if fin_acked else "best-effort (FIN not confirmed)")
-                + (", FIN from peer was received" if peer_fin_seen else ", FIN was not received")
+                + (
+                    "(FIN ACKed) confirmed"
+                    if fin_acked
+                    else "best-effort (FIN not confirmed)"
+                )
+                + (
+                    ", FIN from peer was received"
+                    if peer_fin_seen
+                    else ", FIN was not received"
+                )
                 + "."
             )
 
@@ -407,7 +491,7 @@ class Protocol:
             while i < 3 and not sent:
                 data = data[offset::]
                 sent, offset = self._send_stop_and_wait(flags, data)
-                i+=1
+                i += 1
             if not sent:
                 logger.vprint("ERROR: Connection error")
                 raise Exception("ERROR: Connection error")
@@ -422,19 +506,25 @@ class Protocol:
         n = len(data)
         sent_flag = False
 
-        while offset < n or ((flags & (FLAG_ACK | FLAG_FIN)) != 0 and not sent_flag):
+        while offset < n or (
+            (flags & (FLAG_ACK | FLAG_FIN)) != 0 and not sent_flag
+        ):
             payload = data[offset:offset + PAYLOAD_SIZE]
 
-            attempts = 3                     # ← reset here, per packet
+            attempts = 3  # ← reset here, per packet
             while attempts > 0:
                 send_time = time.time()
                 self._send_packet(flags, payload)
 
                 timeout = self.rto_estimator.get_timeout()
                 logger.vprint(f"\n[Sender] Timeout: {timeout}\n")
-                header,_ , _ = self._receive_packet(timeout)
+                header, _, _ = self._receive_packet(timeout)
                 expected_ack = self.seq_num + len(payload)
-                if header and (header[2] & FLAG_ACK) and header[1] >= expected_ack:
+                if (
+                    header
+                    and (header[2] & FLAG_ACK)
+                    and header[1] >= expected_ack
+                ):
                     rtt_sample = time.time() - send_time
                     self.rto_estimator.note_sample(rtt_sample)
 
@@ -447,13 +537,19 @@ class Protocol:
                     else:
                         offset += header[1] - expected_ack
 
-                    logger.vprint(f"\n[Sender] RTT sample={rtt_sample:.4f}s, new RTO={self.rto_estimator.get_timeout():.4f}s\n")
+                    logger.vprint(
+                        f"\n[Sender] RTT sample={rtt_sample:.4f}s, new RTO={self.rto_estimator.get_timeout():.4f}s\n"
+                    )
                     break
                 else:
-                    logger.vprint("Timeout o incorrect ACK. Retransmitting packet reliably...")
+                    logger.vprint(
+                        "Timeout o incorrect ACK. Retransmitting packet reliably..."
+                    )
                     self.rto_estimator.backoff()
 
-                    logger.vprint(f"\n[Sender] Backoff applied. New RTO={self.rto_estimator.get_timeout():.4f}s (remaining attempts={attempts})\n")
+                    logger.vprint(
+                        f"\n[Sender] Backoff applied. New RTO={self.rto_estimator.get_timeout():.4f}s (remaining attempts={attempts})\n"
+                    )
                     attempts -= 1
 
             if attempts == 0:
@@ -473,7 +569,9 @@ class Protocol:
 
         while True:
             remaining = max(0.0, deadline - time.monotonic())
-            header, data, _ = self._receive_packet(timeout=remaining if remaining > 0 else 0)
+            header, data, _ = self._receive_packet(
+                timeout=remaining if remaining > 0 else 0
+            )
             if not header:
                 # idle timeout?
                 if time.monotonic() >= deadline:
@@ -505,7 +603,9 @@ class Protocol:
                         return header, bytes(received_data)
                     continue
                 else:
-                    logger.vprint(f"Unexpected SEQ {seq_num}. Resending last ACK.")
+                    logger.vprint(
+                        f"Unexpected SEQ {seq_num}. Resending last ACK."
+                    )
                     self._send_packet(FLAG_ACK, b"")
 
             elif header[2] & FLAG_FIN:
@@ -514,9 +614,13 @@ class Protocol:
                 return None, bytes(received_data)
 
             else:
-                logger.vprint(f"Unexpected packet with SEQ={seq_num}. Ignoring.")
+                logger.vprint(
+                    f"Unexpected packet with SEQ={seq_num}. Ignoring."
+                )
 
-    def _receive_reliable_packet(self, payload_size, expected_flags=0, type=STOP_AND_WAIT):
+    def _receive_reliable_packet(
+        self, payload_size, expected_flags=0, type=STOP_AND_WAIT
+    ):
         buffer_size = payload_size
         # Seleccionar el método de recepción según el tipo solicitado.
         if type == self.STOP_AND_WAIT:
@@ -525,7 +629,6 @@ class Protocol:
             return self._recv_selective_repeat(buffer_size)
         else:
             raise ValueError(f"Unknown type of reception: {type}")
-
 
     def _send_selective_repeat(self, data: bytes):
         if not self.is_connected:
@@ -536,8 +639,8 @@ class Protocol:
         data_len = len(data)
         data_end_seq = self.seq_num + data_len
 
-        send_base = self.seq_num           # lowest unacked absolute seq
-        next_seq  = self.seq_num           # next absolute seq to send
+        send_base = self.seq_num  # lowest unacked absolute seq
+        next_seq = self.seq_num  # next absolute seq to send
 
         # in_flight: seq -> { "data": bytes, "sent": float, "attempts": int }
         in_flight = {}
@@ -546,9 +649,11 @@ class Protocol:
 
         while send_base < data_end_seq or in_flight:
             # 1. Fill the window
-            while next_seq < data_end_seq and next_seq < send_base + window_bytes:
+            while (
+                next_seq < data_end_seq and next_seq < send_base + window_bytes
+            ):
                 off = next_seq - self.seq_num
-                chunk = data[off : off + PAYLOAD_SIZE]
+                chunk = data[off:off + PAYLOAD_SIZE]
                 if not chunk:
                     break
 
@@ -558,7 +663,9 @@ class Protocol:
                     "sent": time.time(),
                     "attempts": 1,
                 }
-                logger.vprint(f"[SR] Sent chunk SEQ={next_seq} LEN={len(chunk)}")
+                logger.vprint(
+                    f"[SR] Sent chunk SEQ={next_seq} LEN={len(chunk)}"
+                )
                 next_seq += len(chunk)
 
             # 2.Compute the nearest timer expiry for blocking receive
@@ -566,7 +673,10 @@ class Protocol:
                 now = time.time()
                 rto = self.rto_estimator.get_timeout()
                 # time left for each in-flight seg
-                min_left = min(max(0.0, (seg["sent"] + rto) - now) for seg in in_flight.values())
+                min_left = min(
+                    max(0.0, (seg["sent"] + rto) - now)
+                    for seg in in_flight.values()
+                )
             else:
                 # Nothing in flight, but still have data to send (rare). Don't block long.
                 min_left = 0.05
@@ -581,13 +691,17 @@ class Protocol:
                     # Use the oldest newly-acked segment to compute RTT
                     now = time.time()
                     # Collect acks to remove (seq < ack_val)
-                    acked_seqs = sorted([seq for seq in in_flight.keys() if seq < ack_val])
+                    acked_seqs = sorted(
+                        [seq for seq in in_flight.keys() if seq < ack_val]
+                    )
                     if acked_seqs:
                         oldest_seq = acked_seqs[0]
                         # RTT sample from that segment
                         rtt_sample = now - in_flight[oldest_seq]["sent"]
                         self.rto_estimator.note_sample(rtt_sample)
-                        logger.vprint(f"[SR] ACK advanced to {ack_val}, RTT={rtt_sample:.4f}, RTO={self.rto_estimator.get_timeout():.4f}")
+                        logger.vprint(
+                            f"[SR] ACK advanced to {ack_val}, RTT={rtt_sample:.4f}, RTO={self.rto_estimator.get_timeout():.4f}"
+                        )
 
                     # Drop all fully acked segments
                     for seq in acked_seqs:
@@ -598,7 +712,9 @@ class Protocol:
                     self.seq_num = ack_val  # keep sender seq in sync with peer’s cumulative ACK
                 else:
                     # Duplicate/old ACK -> ignore (optionally count for fast retransmit)
-                    logger.vprint(f"[SR] Dup/old ACK={ack_val} (base={send_base})")
+                    logger.vprint(
+                        f"[SR] Dup/old ACK={ack_val} (base={send_base})"
+                    )
             else:
                 # 4. Timeout path: retransmit any expired segments (oldest first to be gentle)
                 if in_flight:
@@ -607,14 +723,20 @@ class Protocol:
 
                     # Find expired segments
                     expired = sorted(
-                        (seq for seq, seg in in_flight.items() if now - seg["sent"] >= rto)
+                        (
+                            seq
+                            for seq, seg in in_flight.items()
+                            if now - seg["sent"] >= rto
+                        )
                     )
                     if expired:
                         # Retransmit the earliest expired one first (avoid burst)
                         seq = expired[0]
                         seg = in_flight[seq]
                         if seg["attempts"] >= attempts_limit:
-                            logger.vprint(f"[SR] Attempts exceeded for SEQ={seq}. Aborting.")
+                            logger.vprint(
+                                f"[SR] Attempts exceeded for SEQ={seq}. Aborting."
+                            )
                             return False
 
                         self._send_packet(FLAG_PSH, seg["data"])
@@ -622,7 +744,9 @@ class Protocol:
                         seg["attempts"] += 1
                         # Apply backoff once per expiry event
                         self.rto_estimator.backoff()
-                        logger.vprint(f"[SR] Retransmit SEQ={seq} (attempt {seg['attempts']}), new RTO={self.rto_estimator.get_timeout():.4f}")
+                        logger.vprint(
+                            f"[SR] Retransmit SEQ={seq} (attempt {seg['attempts']}), new RTO={self.rto_estimator.get_timeout():.4f}"
+                        )
                     # else: no expired (race with receive timeout); loop again
                 # else: nothing in flight; loop will refill window
 
@@ -630,16 +754,18 @@ class Protocol:
         if not self.is_connected:
             return None, b""
 
-        expected_seq_from_client = self.ack_num           # next in-order byte we want
+        expected_seq_from_client = self.ack_num  # next in-order byte we want
         received_data = bytearray()
-        buffer = {}                           # seq -> bytes (out-of-order)
+        buffer = {}  # seq -> bytes (out-of-order)
         window_bytes = WINDOW_SIZE * PAYLOAD_SIZE
 
         deadline = time.monotonic() + IDLE_TIME
 
         while True:
             remaining = max(0.0, deadline - time.monotonic())
-            header, data, _ = self._receive_packet(timeout=remaining if remaining > 0 else 0)
+            header, data, _ = self._receive_packet(
+                timeout=remaining if remaining > 0 else 0
+            )
             if not header:
                 if time.monotonic() >= deadline:
                     logger.vprint("Idle timeout in recv SR. Closing.")
@@ -653,7 +779,7 @@ class Protocol:
             seq = header[0]
             flags = header[2]
 
-            # Control messages used in the handshake payload path 
+            # Control messages used in the handshake payload path
             if (flags & FLAG_OP) or (flags & FLAG_FNAME):
                 if seq == expected_seq_from_client:
                     received_data.extend(data)
@@ -663,14 +789,19 @@ class Protocol:
                     return header, bytes(received_data)
                 else:
                     # Out-of-order control payload → buffer and ACK cumulative expected
-                    if expected_seq_from_client <= seq < expected_seq_from_client + window_bytes and seq not in buffer:
+                    if (
+                        expected_seq_from_client
+                        <= seq
+                        < expected_seq_from_client + window_bytes
+                        and seq not in buffer
+                    ):
                         buffer[seq] = data
                     self.ack_num = expected_seq_from_client
                     self._send_packet(FLAG_ACK)
                     # keep waiting until we can deliver in order
                     continue
 
-            # Data path (PSH) 
+            # Data path (PSH)
             if flags & FLAG_PSH:
                 if seq == expected_seq_from_client:
                     # in-order: deliver and drain any contiguous buffered chunks
@@ -691,17 +822,25 @@ class Protocol:
                     continue
 
                 # Out-of-order but inside window → buffer, ACK cumulative
-                if expected_seq_from_client <= seq < expected_seq_from_client + window_bytes:
+                if (
+                    expected_seq_from_client
+                    <= seq
+                    < expected_seq_from_client + window_bytes
+                ):
                     if seq not in buffer:
                         buffer[seq] = data
-                        logger.vprint(f"[SR] Buffered out-of-order SEQ={seq} LEN={len(data)}")
+                        logger.vprint(
+                            f"[SR] Buffered out-of-order SEQ={seq} LEN={len(data)}"
+                        )
                     # Even if we got further data, cumulative ACK remains the left edge
                     self.ack_num = expected_seq_from_client
                     self._send_packet(FLAG_ACK)
                     continue
 
                 # Too old or outside window → just re-ACK current expected
-                logger.vprint(f"[SR] SEQ={seq} out of window (expected={expected_seq_from_client}). Re-ACKing.")
+                logger.vprint(
+                    f"[SR] SEQ={seq} out of window (expected={expected_seq_from_client}). Re-ACKing."
+                )
                 self.ack_num = expected_seq_from_client
                 self._send_packet(FLAG_ACK)
                 continue
@@ -715,8 +854,11 @@ class Protocol:
                 return None, bytes(received_data)
 
             # Anything else
-            logger.vprint(f"[SR] Unexpected packet flags={bin(flags)} SEQ={seq}. Ignoring (ACK last).")
+            logger.vprint(
+                f"[SR] Unexpected packet flags={bin(flags)} SEQ={seq}. Ignoring (ACK last)."
+            )
             self.ack_num = expected_seq_from_client
             self._send_packet(FLAG_ACK)
+
     def __del__(self):
         self.close()

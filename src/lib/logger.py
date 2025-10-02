@@ -25,30 +25,33 @@ class Logger:
 
 
 def _detect_default_verbose() -> bool:
-    env = os.environ.get('TP1_VERBOSE')
+    env = os.environ.get("TP1_VERBOSE")
     if env is not None:
-        if env.lower() in ('1', 'true', 'yes', 'on'):
+        if env.lower() in ("1", "true", "yes", "on"):
             return True
         return False
 
     for a in sys.argv[1:]:
-        if a in ('-v', '--verbose'):
+        if a in ("-v", "--verbose"):
             return True
 
     return False
 
 
 def _detect_default_quiet() -> bool:
-    env = os.environ.get('TP1_QUIET')
+    env = os.environ.get("TP1_QUIET")
     if env is not None:
-        if env.lower() in ('1', 'true', 'yes', 'on'):
+        if env.lower() in ("1", "true", "yes", "on"):
             return True
         return False
 
     for a in sys.argv[1:]:
-        if a in ('-q', '--quiet'):
+        if a in ("-q", "--quiet"):
             return True
 
     return False
 
-logger = Logger(verbose=_detect_default_verbose(), quiet=_detect_default_quiet())
+
+logger = Logger(
+    verbose=_detect_default_verbose(), quiet=_detect_default_quiet()
+)

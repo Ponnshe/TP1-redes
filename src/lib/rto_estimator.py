@@ -1,7 +1,5 @@
-import time
-
 class RTOEstimator:
-    def __init__(self, alpha=1/8, beta=1/4, k=4, g=0.001):
+    def __init__(self, alpha=1 / 8, beta=1 / 4, k=4, g=0.001):
         # RFC 6298 parámetros
         self.alpha = alpha
         self.beta = beta
@@ -21,7 +19,9 @@ class RTOEstimator:
             self.rttvar = rtt_sample / 2
         else:
             # Subsigientes
-            self.rttvar = (1 - self.beta) * self.rttvar + self.beta * abs(self.srtt - rtt_sample)
+            self.rttvar = (1 - self.beta) * self.rttvar + self.beta * abs(
+                self.srtt - rtt_sample
+            )
             self.srtt = (1 - self.alpha) * self.srtt + self.alpha * rtt_sample
 
         self.rto = self.srtt + max(self.g, self.k * self.rttvar)

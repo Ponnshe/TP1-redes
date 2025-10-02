@@ -5,11 +5,16 @@ from lib.client import Client
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog="upload.py", description="File Transfer", epilog="TP N#1: File Transfer "
+        prog="upload.py",
+        description="File Transfer",
+        epilog="TP N#1: File Transfer ",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "-v", "--verbose", action="store_true", help="increase output verbosity"
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="increase output verbosity",
     )
     group.add_argument(
         "-q", "--quiet", action="store_true", help="decrease output verbosity"
@@ -17,11 +22,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "-H", "--addr", type=str, default="127.0.0.1", help="server IP address"
     )
-    parser.add_argument("-p", "--port", type=int, default=65432, help="server port")
     parser.add_argument(
-        "-s", "--filepath", type=str, required=True, help="src source file path"
+        "-p", "--port", type=int, default=65432, help="server port"
     )
-    parser.add_argument("-n", "--filename", type=str, default="", help="file name")
+    parser.add_argument(
+        "-s",
+        "--filepath",
+        type=str,
+        required=True,
+        help="src source file path",
+    )
+    parser.add_argument(
+        "-n", "--filename", type=str, default="", help="file name"
+    )
     parser.add_argument(
         "-r",
         "--protocol",
@@ -54,4 +67,4 @@ if __name__ == "__main__":
         print(f"It took {end-start:.4f} seconds to upload the file")
     except Exception as e:
         client.close()
-        raise Exception("Error: {e}")
+        raise Exception(f"Error: {e}")

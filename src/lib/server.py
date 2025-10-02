@@ -30,7 +30,9 @@ def handle_client(client_protocol: Protocol, storage_dir: str):
         if modo == "w":
             while True:
 
-                chunk = client_protocol.recv(size, type=client_protocol.recovery_mode)
+                chunk = client_protocol.recv(
+                    size, type=client_protocol.recovery_mode
+                )
                 if not chunk:
                     logger.info(
                         f"[Thread {threading.get_ident()}] End of transmission for {filename}."
@@ -44,7 +46,9 @@ def handle_client(client_protocol: Protocol, storage_dir: str):
         else:
             chunk = file_manager.read_chunk()
             while chunk:
-                size = client_protocol.send(chunk, type=client_protocol.recovery_mode)
+                size = client_protocol.send(
+                    chunk, type=client_protocol.recovery_mode
+                )
                 logger.vprint(
                     f"[Thread {threading.get_ident()}] Received {size} bytes for {filename}"
                 )
@@ -82,13 +86,16 @@ class Server:
             logger.info(f"Storage directory:'{self.storage_dir}' created.")
 
     def start(self):
-        logger.info(f"Main thread from server listening on {self.host}:{self.port}")
+        logger.info(
+            f"Main thread from server listening on {self.host}:{self.port}"
+        )
         while True:
             client_protocol = self.main_protocol.accept()
 
             if client_protocol:
                 client_thread = threading.Thread(
-                    target=handle_client, args=(client_protocol, self.storage_dir)
+                    target=handle_client,
+                    args=(client_protocol, self.storage_dir),
                 )
                 client_thread.start()
                 self.threads.append(client_thread)

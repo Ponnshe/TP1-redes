@@ -3,13 +3,24 @@ import os
 
 from .file_manager import FileManager
 from .logger import logger
-from .protocolo import HEADER_SIZE, Protocol
+from .protocolo import Protocol
 
 CHUNK_SIZE = 1024 * 4
 
+
 class Client:
 
-    def __init__(self, addr, port, filepath, filename, verbose, quiet, fileop=0, protocolo=Protocol.STOP_AND_WAIT):
+    def __init__(
+        self,
+        addr,
+        port,
+        filepath,
+        filename,
+        verbose,
+        quiet,
+        fileop=0,
+        protocolo=Protocol.STOP_AND_WAIT,
+    ):
         """Inicializa el cliente y crea la conexión del protocolo.
 
         Args:
@@ -39,7 +50,9 @@ class Client:
         logger.set_verbose(self.verbose)
         logger.set_quiet(self.quiet)
 
-        self.conn = Protocol(addr, port, client=True, recovery_mode=self.protocolo)
+        self.conn = Protocol(
+            addr, port, client=True, recovery_mode=self.protocolo
+        )
 
     def close(self):
         if self.conn.is_connected:
@@ -50,7 +63,6 @@ class Client:
         _validate_filepath(self.filepath)
         self._print_info(string_verbose="filepath validated")
 
-        
         # 1. Crear una instancia de FileManager en modo lectura
         #    (esto lanzará excepción si el archivo no existe o no se puede leer)
         self._print_info(string_verbose="Creating file_manager...")
@@ -61,9 +73,12 @@ class Client:
         self._print_info(string_verbose="Connecting with server...")
         logger.vprint(self.addr, self.port, self.filename)
         if not self.conn.connect((self.addr, self.port), self.filename):
-            self._print_info(string_normal="Could not connect to the server.", string_verbose="Connection failed.")
+            self._print_info(
+                string_normal="Could not connect to the server.",
+                string_verbose="Connection failed.",
+            )
             return
-        
+
         # 3. Enviar el primer chunk y luego sucesivos
         self._print_info(string_verbose="Connected with server")
         self._print_info(string_verbose="Reading first chunk...")
@@ -75,8 +90,12 @@ class Client:
 
         while chunk:
             self.conn.send(chunk, type=self.protocolo)
-            self._print_info(string_normal=f"Percentage uploaded: {percentage}%")
-            self._print_info(string_verbose=f"Bytes sent: {read_bytes_count}/{file_size}[B]")
+            self._print_info(
+                string_normal=f"Percentage uploaded: {percentage}%"
+            )
+            self._print_info(
+                string_verbose=f"Bytes sent: {read_bytes_count}/{file_size}[B]"
+            )
 
             chunk = file_manager.read_chunk()
             read_bytes_count += len(chunk)
@@ -85,9 +104,9 @@ class Client:
         self._print_info(
             string_normal=f"{read_bytes_count}[B] have been uploaded to {self.filename} in the server"
         )
-        
+
     def download(self):
-        
+
         # 1. Validar que la ruta de destino exista (no el archivo, que se creará)
         self._print_info(string_verbose="Creating file_manager...")
         file_manager = FileManager(self.filepath, "w")
@@ -97,11 +116,18 @@ class Client:
         logger.vprint(self.addr, self.port, self.filename)
 
         # 2. Conectar al servidor con fileop=1 para descarga
-        if not self.conn.connect((self.addr, self.port), self.filename, fileop=1):
-            self._print_info(string_normal="Could not connect to the server.", string_verbose="Connection failed.")
+        if not self.conn.connect(
+            (self.addr, self.port), self.filename, fileop=1
+        ):
+            self._print_info(
+                string_normal="Could not connect to the server.",
+                string_verbose="Connection failed.",
+            )
             return
 
-        self._print_info(string_verbose="Connected with server. Starting download...")
+        self._print_info(
+            string_verbose="Connected with server. Starting download..."
+        )
 
         received_bytes_count = 0
         # No podemos saber el tamaño del archivo de antemano en el download,
@@ -118,13 +144,12 @@ class Client:
 
             self._print_info(
                 string_normal=f"Received {received_bytes_count} bytes...",
-                string_verbose=f"Received {received_bytes_count} bytes for {self.filename}"
+                string_verbose=f"Received {received_bytes_count} bytes for {self.filename}",
             )
 
         self._print_info(
             string_normal=f"Total {received_bytes_count}[B] have been downloaded to {os.path.join(self.filepath, self.filename)}"
         )
-
 
     def _print_info(self, string_normal=None, string_verbose=None):
         if self.verbose:
@@ -192,6 +217,7 @@ def _validate_verbose_and_quiet(verbose, quiet):
     if verbose and quiet:
         raise ValueError("You can't have both verbose and quiet")
     return verbose, quiet
+
 
 def _parse_protocol_arg(protocolo):
     if protocolo is None or protocolo == "":
